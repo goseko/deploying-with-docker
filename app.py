@@ -1,29 +1,40 @@
-from flask import Flask, render_template, request, redirect, url_for
-import sqlite3
+# app.py
+from flask import Flask, request, jsonify
+from pymongo import MongoClient
 
 app = Flask(__name__)
 
-# SQLite database setup
-conn = sqlite3.connect('users.db')
-c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS users
-             (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)''')
-conn.commit()
+mongo_host = os.getenv('MONGO_HOST', 'localhost')
+client = MongoClient(f'mongodb://{mongo_host}:27017/')
+
+db = client['flask_app']
+
+def create_users_collection():
+    if 'users' not in db.list_collection_names():
+        db.create_collection('users')
+
+create_users_collection()
 
 @app.route('/')
-def welcome():
-    return render_template('welcome.html')
+def index():
+    return jsonify(message="Welcome to the Flask App!")
 
-@app.route('/form', methods=['GET', 'POST'])
-def form():
-    if request.method == 'POST':
-        name = request.form['name']
-        age = int(request.form['age'])
-        # Insert user data into the SQLite database
-        c.execute('INSERT INTO users (name, age) VALUES (?, ?)', (name, age))
-        conn.commit()
-        return redirect(url_for('welcome'))
-    return render_template('form.html')
+@app.route('/submit', methods=['POST'])
+def submit():
+    data = request.get_json()
+    name = data.get('name')
+    age = data.get('age')
+
+    if not name or not age:
+        return jsonify(error="Name and age are required."), 400
+
+    user = {
+        "name": name,
+        "age": age
+    }
+    db.users.insert_one(user)
+
+    return jsonify(message="Data stored successfully.")
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
